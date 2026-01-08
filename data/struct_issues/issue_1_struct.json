@@ -1,0 +1,40 @@
+{
+    "policy_target": "推进城市公共交通电动化转型，提高环保效益并兼顾财政可承受性与交通服务稳定性",
+    "time_horizon": 5,
+    "dimensions": [
+      {
+        "key": "electric_bus_ratio",
+        "name": "电动公交车占比目标",
+        "type": "continuous",
+        "range": [30, 100],
+        "default": 60,
+        "unit": "%"
+      },
+      {
+        "key": "infrastructure_speed",
+        "name": "充电基础设施建设速度",
+        "type": "enum",
+        "options": ["逐步推进", "加速推进", "快速集中建设"],
+        "default": "加速推进"
+      },
+      {
+        "key": "financial_strategy",
+        "name": "财政支持策略",
+        "type": "enum",
+        "options": [
+          "地方财政+国家补贴为主",
+          "政府+社会资本合作（PPP）",
+          "市场化为主，财政有限补贴"
+        ],
+        "default": "地方财政+国家补贴为主"
+      },
+      {
+        "key": "risk_control_level",
+        "name": "运营风险可接受程度",
+        "type": "continuous",
+        "range": [0, 10],
+        "default": 5
+      }
+    ]
+  }
+  

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API 配置 - 政府部门多智能体决策仿真系统</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <h1>🔧 API 配置</h1>
+      <nav>
+        <a href="/">返回首页</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="setup-section">
+        <h2>通义千问 API Key 配置</h2>
+
+        <div class="info-box">
+          <h3>📝 获取 API Key 步骤：</h3>
+          <ol>
+            <li>访问 <a href="https://dashscope.console.aliyun.com/" target="_blank">阿里云百炼平台</a></li>
+            <li>登录阿里云账号</li>
+            <li>进入「API-KEY 管理」</li>
+            <li>创建并复制 API Key（格式：sk-xxxxxxxx）</li>
+          </ol>
+        </div>
+
+        <form id="setupForm" class="setup-form">
+          <div class="form-group">
+            <label for="apiKey">
+              <strong>DASHSCOPE_API_KEY</strong>
+              <span class="required">*</span>
+            </label>
+            <input type="password" id="apiKey" name="api_key" placeholder="sk-xxxxxxxxxxxxxxxx"
+              value="{{ current_api_key or '' }}" required>
+            <small>粘贴您的通义千问 API Key</small>
+          </div>
+
+          <div class="form-group">
+            <label for="baseUrl">Base URL（可选）</label>
+            <input type="text" id="baseUrl" name="base_url" value="https://dashscope.aliyuncs.com/compatible-mode/v1">
+            <small>一般无需修改</small>
+          </div>
+
+          <div class="button-group">
+            <button type="submit" class="btn-primary" id="saveBtn">
+              💾 保存配置
+            </button>
+            <button type="button" class="btn-secondary" onclick="testConnection()">
+              🔌 测试连接
+            </button>
+          </div>
+        </form>
+
+        <div id="resultMessage" class="result-message"></div>
+
+        <div class="status-box" id="statusBox">
+          <h3>当前状态</h3>
+          <p>API Key: <span id="statusApiKey">{{ '已配置 ✅' if current_api_key else '未配置 ❌' }}</span></p>
+          <p>配置文件: <code>.env</code></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    document.getElementById('setupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const data = {
+        api_key: formData.get('api_key'),
+        base_url: formData.get('base_url')
+      };
+
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中...';
+
+      try {
+        const response = await fetch('/api/config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showMessage('✅ ' + result.message, 'success');
+          document.getElementById('statusApiKey').textContent = '已配置 ✅';
+
+          // 3秒后跳转到首页
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+        } else {
+          showMessage('❌ ' + (result.detail || '保存失败'), 'error');
+        }
+      } catch (error) {
+        showMessage('❌ 保存失败：' + error.message, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 保存配置';
+      }
+    });
+
+    async function testConnection() {
+      const apiKey = document.getElementById('apiKey').value;
+      if (!apiKey) {
+        showMessage('⚠️ 请先输入 API Key', 'warning');
+        return;
+      }
+
+      showMessage('🔄 测试连接中...', 'info');
+
+      try {
+        const response = await fetch('/api/config/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          showMessage('✅ 连接成功！模型：' + result.model, 'success');
+        } else {
+          showMessage('❌ 连接失败：' + (result.error || '未知错误'), 'error');
+        }
+      } catch (error) {
+        showMessage('❌ 测试失败：' + error.message, 'error');
+      }
+    }
+
+    function showMessage(text, type) {
+      const msgBox = document.getElementById('resultMessage');
+      msgBox.textContent = text;
+      msgBox.className = 'result-message ' + type;
+      msgBox.style.display = 'block';
+    }
+  </script>
+
+  <style>
+    .setup-section {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .info-box {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 20px;
+      margin-bottom: 30px;
+      border-radius: 8px;
+    }
+
+    .info-box h3 {
+      margin-top: 0;
+      color: #1e40af;
+    }
+
+    .info-box ol {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .info-box a {
+      color: #2563eb;
+      text-decoration: underline;
+    }
+
+    .setup-form {
+      background: var(--bg-color);
+      padding: 30px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .required {
+      color: var(--danger-color);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .btn-secondary {
+      background: var(--secondary-color);
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .result-message {
+      display: none;
+      padding: 15px 20px;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 500;
+    }
+
+    .result-message.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+
+    .result-message.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #ef4444;
+    }
+
+    .result-message.warning {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #f59e0b;
+    }
+
+    .result-message.info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #3b82f6;
+    }
+
+    .status-box {
+      background: var(--bg-color);
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .status-box h3 {
+      margin-top: 0;
+    }
+
+    .status-box code {
+      background: white;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</body>
+
+</html>

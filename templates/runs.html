@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>历史记录 - 政府部门多智能体决策仿真系统</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  {% set status_map = {
+  "pending": "待处理",
+  "running": "运行中",
+  "completed": "已完成",
+  "failed": "失败"
+  } %}
+  {% set stage_map = {
+  "intake_issue": "议题进入",
+  "departments_generate_memos": "部门备忘录",
+  "secretariat_aggregate_disputes": "汇总分歧",
+  "negotiation_rounds": "多轮谈判",
+  "legal_review_gate": "法制门禁",
+  "fiscal_capacity_review_gate": "财政门禁",
+  "workflow": "工作流",
+  "decider_finalize": "最终裁决",
+  "implementation_plan": "执行计划"
+  } %}
+
+  <div class="container">
+    <header>
+      <h1>🏛️ 政府部门多智能体决策仿真系统</h1>
+      <nav>
+        <a href="/">新建仿真</a>
+        <a href="/runs" class="active">历史记录</a>
+        <a href="/setup">⚙️ API 配置</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="runs-list">
+        <h2>历史仿真记录</h2>
+
+        {% if runs %}
+        <table class="runs-table">
+          <thead>
+            <tr>
+              <th>Run ID</th>
+              <th>议题</th>
+              <th>状态</th>
+              <th>当前阶段</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for run in runs %}
+            <tr>
+              <td><code>{{ run.run_id[:8] }}</code></td>
+              <td>{{ run.issue_title }}</td>
+              <td>
+                <span class="status-badge status-{{ run.status }}">
+                  {{ status_map.get(run.status, run.status) }}
+                </span>
+              </td>
+              <td>{{ stage_map.get(run.current_stage, run.current_stage) }}</td>
+              <td>{{ run.created_at[:19] }}</td>
+              <td>
+                <a href="/runs/{{ run.run_id }}" class="btn-link">查看</a>
+                <button onclick="deleteRun('{{ run.run_id }}', '{{ run.issue_title }}')" class="btn-delete">删除</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+          <p>📭 暂无历史记录</p>
+          <a href="/" class="btn-primary">创建第一个仿真</a>
+        </div>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+
+  <script>
+    async function deleteRun(runId, issueTitle) {
+      if (!confirm(`确定要删除运行记录「${issueTitle}」吗？\n\nRun ID: ${runId.substring(0, 8)}\n\n此操作不可恢复！`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/runs/${runId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          alert('删除成功');
+          location.reload();
+        } else {
+          const error = await response.text();
+          alert('删除失败：' + error);
+        }
+      } catch (error) {
+        alert('删除失败：' + error.message);
+      }
+    }
+  </script>
+</body>
+
+</html>

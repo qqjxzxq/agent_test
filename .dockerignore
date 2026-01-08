@@ -1,0 +1,47 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv
+agent/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+
+# 项目特定（构建时不需要的）
+artifacts/
+*.md
+!README.md
+LICENSE
+.env.example

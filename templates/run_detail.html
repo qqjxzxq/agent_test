@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实时工作台 - {{ state.issue.title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/htmx.org/dist/ext/sse.js"></script>
+</head>
+
+<body>
+  {% set status_map = {
+  "pending": "待处理",
+  "running": "运行中",
+  "completed": "已完成",
+  "failed": "失败"
+  } %}
+  {% set stage_map = {
+  "intake_issue": "议题进入",
+  "departments_generate_memos": "部门备忘录",
+  "secretariat_aggregate_disputes": "汇总分歧",
+  "negotiation_rounds": "多轮谈判",
+  "legal_review_gate": "法制门禁",
+  "fiscal_capacity_review_gate": "财政门禁",
+  "workflow": "工作流",
+  "decider_finalize": "最终裁决",
+  "implementation_plan": "执行计划"
+  } %}
+  {% set department_map = {
+  "finance": "财政部",
+  "legal": "法制办",
+  "environment": "环保局",
+  "security": "安全部",
+  "planning": "规划局",
+  "industry": "工信局",
+  "health": "卫生局",
+  "education": "教育局",
+  "transport": "交通局"
+  } %}
+  {% set severity_map = {
+  "high": "高",
+  "medium": "中",
+  "low": "低"
+  } %}
+  {% set position_map = {
+  "support": "支持",
+  "oppose": "反对",
+  "conditional": "有条件支持",
+  "neutral": "中立"
+  } %}
+
+  <div class="container">
+    <header>
+      <h1>🏛️ {{ state.issue.title }}</h1>
+      <nav>
+        <a href="/">新建仿真</a>
+        <a href="/runs">历史记录</a>
+      </nav>
+    </header>
+
+    <main class="workspace">
+      <!-- 状态概览 -->
+      <section class="status-overview">
+        <div class="status-card">
+          <h3>运行状态</h3>
+          <span class="status-badge status-{{ state.run_status }}" id="runStatus">
+            {{ status_map.get(state.run_status, state.run_status) }}
+          </span>
+        </div>
+        <div class="status-card">
+          <h3>当前阶段</h3>
+          <span id="currentStage">{{ stage_map.get(state.current_stage, state.current_stage) }}</span>
+        </div>
+        <div class="status-card">
+          <h3>政策版本</h3>
+          <span>{{ state.policy_version }}</span>
+        </div>
+        <div class="status-card">
+          <h3>事件数</h3>
+          <span id="eventCount">{{ state.trace_log|length }}</span>
+        </div>
+      </section>
+
+      <!-- 阶段 Stepper -->
+      <section class="stage-stepper">
+        <h2>流程阶段</h2>
+        <div class="stepper" id="stepper">
+          {% set stages = [
+          ("intake_issue", "议题进入"),
+          ("departments_generate_memos", "部门备忘录"),
+          ("secretariat_aggregate_disputes", "汇总分歧"),
+          ("negotiation_rounds", "多轮谈判"),
+          ("legal_review_gate", "法制门禁"),
+          ("fiscal_capacity_review_gate", "财政门禁"),
+          ("decider_finalize", "最终裁决"),
+          ("implementation_plan", "执行计划")
+          ] %}
+          {% for stage_id, stage_name in stages %}
+          <div class="step {% if state.current_stage == stage_id %}active{% endif %}" data-stage="{{ stage_id }}"
+            onclick="showStageDetails('{{ stage_id }}', '{{ stage_name }}')">
+            <div class="step-number">{{ loop.index }}</div>
+            <div class="step-label">{{ stage_name }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <!-- 主内容区 -->
+      <div class="content-grid">
+        <!-- 阶段详情展示区 -->
+        <section class="stage-detail-section" id="stageDetailSection" style="display: none;">
+          <div class="stage-detail-header">
+            <h2 id="stageDetailTitle">阶段详情</h2>
+            <button class="btn-close" onclick="closeStageDetails()">✕ 关闭</button>
+          </div>
+          <div id="stageDetailContent" class="stage-detail-content">
+            <!-- 动态加载内容 -->
+          </div>
+        </section>
+
+        <!-- 时间线 -->
+        <section class="timeline-section">
+          <h2>实时时间线</h2>
+          <div class="timeline" id="timeline">
+            {% for event in state.trace_log %}
+            <div class="timeline-item event-{{ event.event_type }}">
+              <div class="timeline-time">{{ event.timestamp.strftime('%H:%M:%S') }}</div>
+              <div class="timeline-content">
+                <strong>{{ stage_map.get(event.stage, event.stage) }}</strong>
+                {% if event.agent_id %}
+                <span class="agent-badge">
+                  {% if event.agent_id == "agent_finance" %}💰 财政部
+                  {% elif event.agent_id == "agent_legal" %}⚖️ 法制办
+                  {% elif event.agent_id == "agent_planning" %}📋 规划局
+                  {% elif event.agent_id == "agent_industry" %}🏭 工信局
+                  {% elif event.agent_id == "agent_environment" %}🌱 环保局
+                  {% elif event.agent_id == "agent_security" %}🔒 安全局
+                  {% elif event.agent_id == "agent_office" %}📝 办公厅
+                  {% elif event.agent_id == "agent_decider" %}👑 决策者
+                  {% else %}{{ event.agent_id }}{% endif %}
+                </span>
+                {% endif %}
+                <p>{{ event.message }}</p>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <!-- 详情面板 -->
+        <section class="details-panel">
+          <!-- 部门备忘录 -->
+          <div class="panel-card">
+            <h3>部门备忘录 ({{ state.memos|length }})</h3>
+            <div class="tabs" id="memoTabs">
+              {% for memo in state.memos %}
+              <button class="tab-btn {% if loop.first %}active{% endif %}" onclick="showMemo({{ loop.index0 }})">
+                {{ department_map.get(memo.department, memo.department) }}
+              </button>
+              {% endfor %}
+            </div>
+            <div class="tabs-content" id="memosContent">
+              {% for memo in state.memos %}
+              <div class="tab-pane {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}">
+                <div class="memo-position position-{{ memo.position }}">
+                  立场：{{ position_map.get(memo.position, memo.position) }}
+                </div>
+                <p><strong>理由：</strong>{{ memo.rationale }}</p>
+                <p><strong>关切点：</strong></p>
+                <ul>
+                  {% for concern in memo.concerns %}
+                  <li>{{ concern }}</li>
+                  {% endfor %}
+                </ul>
+                <p><strong>建议：</strong></p>
+                <ul>
+                  {% for rec in memo.recommendations %}
+                  <li>{{ rec }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- 分歧点 -->
+          <div class="panel-card">
+            <h3>分歧点 ({{ state.disputes|length }})</h3>
+            {% for dispute in state.disputes %}
+            <div class="dispute-item severity-{{ dispute.severity }}">
+              <h4>{{ dispute.topic }}</h4>
+              <p>涉及部门：{% for dept in dispute.departments %}{{ department_map.get(dept, dept) }}{% if not loop.last %}、{%
+                endif %}{% endfor %}</p>
+              <p>严重程度：{{ severity_map.get(dispute.severity, dispute.severity) }}</p>
+              {% set dispute_status_map = {"unresolved": "未解决", "resolved": "已解决", "escalated": "已升级"} %}
+              <span class="status-badge status-{{ dispute.status }}">{{ dispute_status_map.get(dispute.status,
+                dispute.status) }}</span>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- 门禁结果 -->
+          <div class="panel-card">
+            <h3>门禁结果</h3>
+            {% for gate in state.gate_results %}
+            <div class="gate-result {% if gate.passed %}gate-pass{% else %}gate-fail{% endif %}">
+              <h4>{{ gate.gate_name }}</h4>
+              <p>结果：{% if gate.passed %}✅ 通过{% else %}❌ 未通过{% endif %}</p>
+              {% if gate.issues %}
+              <p><strong>问题：</strong></p>
+              <ul>
+                {% for issue in gate.issues %}
+                <li>{{ issue }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- 最终决策 -->
+          {% if state.decision %}
+          <div class="panel-card">
+            <h3>最终决策</h3>
+            <div
+              class="decision {% if state.decision.approved %}decision-approved{% else %}decision-rejected{% endif %}">
+              <h4>{% if state.decision.approved %}✅ 批准{% else %}❌ 不批准{% endif %}</h4>
+              <p><strong>政策文本：</strong></p>
+              <div class="policy-text">{{ state.decision.final_policy_text }}</div>
+              <p><strong>决策理由：</strong></p>
+              <p>{{ state.decision.rationale }}</p>
+              {% if state.decision.conditions %}
+              <p><strong>附加条件：</strong></p>
+              <ul>
+                {% for cond in state.decision.conditions %}
+                <li>{{ cond }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Agent活动 -->
+          {% if state.agents %}
+          <div class="panel-card">
+            <h3>🤖 Agent活动 ({{ state.agents|length }})</h3>
+            <div class="agents-grid">
+              {% for agent_id, agent in state.agents.items() %}
+              <div class="agent-card" data-agent-id="{{ agent_id }}">
+                <div class="agent-header">
+                  <h4>
+                    {% if agent.role == "finance" %}💰 财政部
+                    {% elif agent.role == "legal" %}⚖️ 法制办
+                    {% elif agent.role == "planning" %}📋 规划局
+                    {% elif agent.role == "industry" %}🏭 工信局
+                    {% elif agent.role == "environment" %}🌱 环保局
+                    {% elif agent.role == "security" %}🔒 安全局
+                    {% elif agent.role == "office" %}📝 办公厅
+                    {% elif agent.role == "decider" %}👑 决策者
+                    {% else %}{{ agent.role }}{% endif %}
+                  </h4>
+                  <span class="agent-status status-{{ agent.status.value }}">
+                    {% if agent.status == "idle" %}待机
+                    {% elif agent.status == "observing" %}观察中
+                    {% elif agent.status == "thinking" %}思考中
+                    {% elif agent.status == "acting" %}行动中
+                    {% elif agent.status == "planning" %}规划中
+                    {% elif agent.status == "communicating" %}通信中
+                    {% elif agent.status == "waiting" %}等待中
+                    {% else %}{{ agent.status }}{% endif %}
+                  </span>
+                </div>
+                {% if agent.position %}
+                <div class="agent-position position-{{ agent.position }}">
+                  立场：{{ position_map.get(agent.position, agent.position) }}
+                </div>
+                {% endif %}
+                {% if agent.plan and agent.plan.is_active %}
+                <div class="agent-plan">
+                  <strong>规划：</strong>{{ agent.plan.goal[:50] }}...
+                  <div class="plan-steps">
+                    {% for step in agent.plan.steps %}
+                    <span class="step-status status-{{ step.status }}">{{ step.description[:30] }}...</span>
+                    {% endfor %}
+                  </div>
+                </div>
+                {% endif %}
+                {% if agent.memory %}
+                <div class="agent-memory">
+                  <small>
+                    观察: {{ agent.memory.observations|length }},
+                    思考: {{ agent.memory.thoughts|length }},
+                    行动: {{ agent.memory.actions|length }},
+                    消息: {{ agent.memory.received_messages|length + agent.memory.sent_messages|length }}
+                  </small>
+                </div>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          
+          <!-- Agent消息通信 -->
+          {% if state.message_queue %}
+          <div class="panel-card">
+            <h3>💬 Agent消息通信 ({{ state.message_queue|length }})</h3>
+            <div class="messages-list">
+              {% for msg in state.message_queue[-10:] %}
+              <div class="message-item">
+                <div class="message-header">
+                  <span class="message-from">{{ department_map.get(msg.from_agent, msg.from_agent) }}</span>
+                  <span class="message-arrow">→</span>
+                  <span class="message-to">{{ department_map.get(msg.to_agent, msg.to_agent) }}</span>
+                  <span class="message-type">{{ msg.message_type.value }}</span>
+                </div>
+                <div class="message-content">{{ msg.content[:100] }}{% if msg.content|length > 100 %}...{% endif %}</div>
+                <div class="message-time">{{ msg.timestamp.strftime('%H:%M:%S') }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% endif %}
+
+          <!-- Artifacts -->
+          {% if state.artifacts_index %}
+          <div class="panel-card">
+            <h3>产出文件</h3>
+            <ul class="artifacts-list">
+              {% for artifact in state.artifacts_index %}
+              <li>
+                <a href="/api/runs/{{ run_id }}/artifacts/{{ artifact.name }}" target="_blank">
+                  📄 {{ artifact.name }} ({{ (artifact.size_bytes / 1024)|round(1) }} KB)
+                </a>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentMemoIndex = 0;
+    const stateData = {{ state.model_dump_json() | safe }};
+
+    // 中文映射
+    const statusMap = {
+      "pending": "待处理",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败"
+    };
+
+    const stageMap = {
+      "intake_issue": "议题进入",
+      "departments_generate_memos": "部门备忘录",
+      "secretariat_aggregate_disputes": "汇总分歧",
+      "negotiation_rounds": "多轮谈判",
+      "legal_review_gate": "法制门禁",
+      "fiscal_capacity_review_gate": "财政门禁",
+      "decider_finalize": "最终裁决",
+      "implementation_plan": "执行计划"
+    };
+
+    const departmentMap = {
+      "finance": "财政部",
+      "legal": "法制办",
+      "environment": "环保局",
+      "security": "安全部",
+      "planning": "规划局",
+      "industry": "工信局",
+      "health": "卫生局",
+      "education": "教育局",
+      "transport": "交通局"
+    };
+
+    const severityMap = {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    };
+
+    const positionMap = {
+      "support": "支持",
+      "oppose": "反对",
+      "conditional": "有条件支持",
+      "neutral": "中立"
+    };
+
+    function showMemo(index) {
+      document.querySelectorAll('#memoTabs .tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+      });
+      document.querySelectorAll('#memosContent .tab-pane').forEach((pane, i) => {
+        pane.classList.toggle('active', i === index);
+      });
+      currentMemoIndex = index;
+    }
+
+    function showStageDetails(stageId, stageName) {
+      const section = document.getElementById('stageDetailSection');
+      const titleEl = document.getElementById('stageDetailTitle');
+      const contentEl = document.getElementById('stageDetailContent');
+      let content = ''; // 声明content变量
+
+      // 更新阶段高亮
+      document.querySelectorAll('.step').forEach(step => {
+        if (step.dataset.stage === stageId) {
+          step.classList.add('active');
+        } else {
+          step.classList.remove('active');
+        }
+      });
+
+      if (stageId === 'intake_issue') {
+        const urgencyMap = { 'high': '高', 'medium': '中', 'low': '低' };
+        const urgencyZh = urgencyMap[stateData.issue.urgency] || stateData.issue.urgency;
+        content = `
+          <h3>议题信息</h3>
+          <p><strong>标题：</strong>${stateData.issue.title}</p>
+          <p><strong>描述：</strong>${stateData.issue.description}</p>
+          <p><strong>背景：</strong>${stateData.issue.background}</p>
+          <p><strong>紧迫性：</strong><span class="urgency-${stateData.issue.urgency}">${urgencyZh}</span></p>
+          ${stateData.policy_card ? `
+            <h3>初始政策卡片</h3>
+            <p><strong>标题：</strong>${stateData.policy_card.title}</p>
+            <p><strong>摘要：</strong>${stateData.policy_card.summary}</p>
+            <p><strong>预算：</strong>${(stateData.policy_card.estimated_budget / 1e8).toFixed(2)} 亿元</p>
+          ` : ''}
+        `;
+      } else if (stageId === 'departments_generate_memos') {
+        content = '<h3>部门备忘录</h3>';
+        if (stateData.memos && stateData.memos.length > 0) {
+          stateData.memos.forEach(memo => {
+            const deptZh = departmentMap[memo.department] || memo.department;
+            const positionZh = positionMap[memo.position] || memo.position;
+            content += `
+              <div class="memo-card">
+                <h4>${deptZh}</h4>
+                <p><strong>立场：</strong><span class="position-${memo.position}">${positionZh}</span></p>
+                <p><strong>理由：</strong>${memo.rationale}</p>
+                <p><strong>关切点：</strong>${memo.concerns.join('、')}</p>
+              </div>
+            `;
+          });
+        } else {
+          content += '<p>暂无备忘录数据</p>';
+        }
+      } else if (stageId === 'secretariat_aggregate_disputes') {
+        content = '<h3>汇总分歧</h3>';
+        if (stateData.disputes && stateData.disputes.length > 0) {
+          stateData.disputes.forEach(dispute => {
+            const deptsZh = dispute.departments.map(d => departmentMap[d] || d).join('、');
+            const severityZh = severityMap[dispute.severity] || dispute.severity;
+            const statusZh = { 'unresolved': '未解决', 'resolved': '已解决', 'escalated': '已升级' }[dispute.status] || dispute.status;
+            content += `
+              <div class="dispute-card severity-${dispute.severity}">
+                <h4>${dispute.topic}</h4>
+                <p><strong>涉及部门：</strong>${deptsZh}</p>
+                <p><strong>严重程度：</strong>${severityZh}</p>
+                <p><strong>状态：</strong>${statusZh}</p>
+              </div>
+            `;
+          });
+        } else {
+          content += '<p>暂无分歧数据</p>';
+        }
+      } else if (stageId === 'negotiation_rounds') {
+        content = '<h3>谈判轮次</h3>';
+        if (stateData.negotiation_history && stateData.negotiation_history.length > 0) {
+          stateData.negotiation_history.forEach(round => {
+            content += `
+              <div class="negotiation-card">
+                <h4>第 ${round.round_number} 轮</h4>
+                <p><strong>收敛分数：</strong>${(round.convergence_score * 100).toFixed(1)}%</p>
+                <p><strong>处理分歧：</strong>${round.disputes_addressed.length} 个</p>
+                <p><strong>剩余分歧：</strong>${round.remaining_disputes.length} 个</p>
+              </div>
+            `;
+          });
+        } else {
+          content += '<p>暂无谈判数据</p>';
+        }
+      } else if (stageId === 'legal_review_gate' || stageId === 'fiscal_capacity_review_gate') {
+        content = '<h3>门禁审查结果</h3>';
+        const gate = stateData.gate_results?.find(g => g.gate_name.includes(stageId.split('_')[0]));
+        if (gate) {
+          content += `
+            <div class="gate-card ${gate.passed ? 'gate-pass' : 'gate-fail'}">
+              <h4>${gate.passed ? '✅ 通过' : '❌ 未通过'}</h4>
+              <p><strong>审查项：</strong>${gate.gate_name}</p>
+              ${gate.issues.length > 0 ? `<p><strong>问题：</strong>${gate.issues.join('；')}</p>` : ''}
+              ${gate.recommendations.length > 0 ? `<p><strong>建议：</strong>${gate.recommendations.join('；')}</p>` : ''}
+            </div>
+          `;
+        } else {
+          content += '<p>暂无门禁数据</p>';
+        }
+      } else if (stageId === 'decider_finalize') {
+        content = '<h3>最终决策</h3>';
+        if (stateData.decision) {
+          const dec = stateData.decision;
+          content += `
+            <div class="decision-card ${dec.approved ? 'decision-approved' : 'decision-rejected'}">
+              <h4>${dec.approved ? '✅ 批准' : '❌ 不批准'}</h4>
+              <p><strong>决策理由：</strong>${dec.rationale}</p>
+              <p><strong>政策文本：</strong></p>
+              <div class="policy-text-box">${dec.final_policy_text}</div>
+              ${dec.conditions.length > 0 ? `<p><strong>附加条件：</strong>${dec.conditions.join('；')}</p>` : ''}
+              ${dec.next_steps.length > 0 ? `<p><strong>下一步：</strong>${dec.next_steps.join('；')}</p>` : ''}
+            </div>
+          `;
+        } else {
+          content += '<p>暂无决策数据</p>';
+        }
+      } else if (stageId === 'implementation_plan') {
+        content = '<h3>执行计划</h3>';
+        const artifact = stateData.artifacts_index?.find(a => a.name === 'implementation_plan.txt');
+        if (artifact) {
+          content += `
+            <p>执行计划已生成</p>
+            <a href="/api/runs/{{ run_id }}/artifacts/${artifact.name}" target="_blank" class="btn-link">
+              📄 查看执行计划
+            </a>
+          `;
+        } else {
+          content += '<p>执行计划尚未生成</p>';
+        }
+      } else {
+        content = '<p>该阶段暂无详细信息</p>';
+      }
+
+      contentEl.innerHTML = content;
+      section.style.display = 'block';
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function closeStageDetails() {
+      document.getElementById('stageDetailSection').style.display = 'none';
+    }
+
+    // 检查运行状态，如果已完成或失败，不建立SSE连接
+    const runStatus = '{{ state.run_status }}';
+    if (runStatus === 'completed' || runStatus === 'failed') {
+      console.log('运行已结束，不建立SSE连接');
+    } else {
+      // SSE 连接 - 仅在运行中时建立
+      const eventSource = new EventSource('/api/runs/{{ run_id }}/events');
+
+      eventSource.addEventListener('stage_change', (e) => {
+        const data = JSON.parse(e.data);
+        const stageZh = stageMap[data.stage] || data.stage;
+        document.getElementById('currentStage').textContent = stageZh;
+
+        // 更新 stepper
+        document.querySelectorAll('.step').forEach(step => {
+          if (step.dataset.stage === data.stage) {
+            step.classList.add('active');
+          } else {
+            step.classList.remove('active');
+          }
+        });
+
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('memo_ready', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+        // 实际应用中可以动态刷新备忘录列表
+      });
+
+      eventSource.addEventListener('dispute_update', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('negotiation_round', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('tool_call', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('gate_result', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('decision', (e) => {
+        const data = JSON.parse(e.data);
+        addTimelineItem(data);
+      });
+
+      eventSource.addEventListener('completed', (e) => {
+        document.getElementById('runStatus').textContent = statusMap['completed'];
+        document.getElementById('runStatus').className = 'status-badge status-completed';
+        addTimelineItem({
+          timestamp: new Date().toISOString(),
+          stage: 'completed',
+          event_type: 'completed',
+          message: '✅ 工作流完成'
+        });
+        eventSource.close();
+
+        // 不自动刷新页面，让用户手动查看结果
+      });
+
+      eventSource.addEventListener('error', (e) => {
+        console.error('SSE error:', e);
+        if (e.data) {
+          const data = JSON.parse(e.data);
+          document.getElementById('runStatus').textContent = statusMap['failed'];
+          document.getElementById('runStatus').className = 'status-badge status-failed';
+          addTimelineItem({
+            timestamp: new Date().toISOString(),
+            stage: 'error',
+            event_type: 'error',
+            message: '❌ ' + (data.error || '未知错误')
+          });
+        }
+        eventSource.close();
+      });
+
+      function addTimelineItem(data) {
+        const timeline = document.getElementById('timeline');
+        const item = document.createElement('div');
+        item.className = `timeline-item event-${data.event_type}`;
+
+        const time = new Date(data.timestamp).toLocaleTimeString('zh-CN');
+        const stageZh = stageMap[data.stage] || data.stage;
+        
+        // Agent信息
+        let agentBadge = '';
+        if (data.agent_id) {
+          const agentMap = {
+            'agent_finance': '💰 财政部',
+            'agent_legal': '⚖️ 法制办',
+            'agent_planning': '📋 规划局',
+            'agent_industry': '🏭 工信局',
+            'agent_environment': '🌱 环保局',
+            'agent_security': '🔒 安全局',
+            'agent_office': '📝 办公厅',
+            'agent_decider': '👑 决策者'
+          };
+          const agentName = agentMap[data.agent_id] || data.agent_id;
+          agentBadge = `<span class="agent-badge">${agentName}</span>`;
+        }
+
+        item.innerHTML = `
+                <div class="timeline-time">${time}</div>
+                <div class="timeline-content">
+                    <strong>${stageZh}</strong>
+                    ${agentBadge}
+                    <p>${data.message}</p>
+                </div>
+            `;
+
+        timeline.appendChild(item);
+        timeline.scrollTop = timeline.scrollHeight;
+
+        // 更新事件计数
+        const count = parseInt(document.getElementById('eventCount').textContent) + 1;
+        document.getElementById('eventCount').textContent = count;
+      }
+
+      // 结束SSE连接的if语句
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>政府部门多智能体决策仿真系统</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  {% set urgency_map = {
+  "high": "高",
+  "medium": "中",
+  "low": "低"
+  } %}
+
+  <div class="container">
+    <header>
+      <h1>🏛️ 政府部门多智能体决策仿真系统</h1>
+      <nav>
+        <a href="/" class="active">新建仿真</a>
+        <a href="/runs">历史记录</a>
+        <a href="/setup">⚙️ API 配置</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="config-panel">
+        <h2>选择议题</h2>
+        <form id="runForm">
+          <div class="form-group">
+            <label for="issueSelect">议题选择</label>
+            <select id="issueSelect" name="issue_select">
+              <option value="">请选择议题...</option>
+              {% for issue in issues %}
+              <option value="{{ issue.id }}" data-title="{{ issue.title }}" data-description="{{ issue.description }}"
+                data-background="{{ issue.background }}" data-urgency="{{ issue.urgency }}"
+                data-sectors='{{ issue.sectors | tojson }}'>
+                {{ issue.title }} [紧急度: {{ urgency_map.get(issue.urgency, issue.urgency).upper() }}]
+              </option>
+              {% endfor %}
+              <option value="custom">自定义议题...</option>
+            </select>
+          </div>
+
+          <div id="customIssueFields" style="display: none;">
+            <div class="form-group">
+              <label for="customTitle">议题标题 <span style="color: red;">*</span></label>
+              <input type="text" id="customTitle" placeholder="请输入议题标题">
+            </div>
+
+            <div class="form-group">
+              <label for="customDescription">议题描述 <span style="color: red;">*</span></label>
+              <textarea id="customDescription" rows="3" placeholder="请描述议题的主要内容..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="customBackground">背景信息</label>
+              <textarea id="customBackground" rows="3" placeholder="请输入相关背景信息（可选）"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="customUrgency">紧急程度</label>
+              <select id="customUrgency">
+                <option value="low">低</option>
+                <option value="medium" selected>中</option>
+                <option value="high">高</option>
+              </select>
+            </div>
+          </div>
+
+          <h2 style="margin-top: 32px;">配置参数</h2>
+
+          <div class="form-group">
+            <label for="maxRounds">最大谈判轮次</label>
+            <input type="number" id="maxRounds" name="max_rounds" value="5" min="1" max="10">
+          </div>
+
+          <div class="form-group">
+            <label for="threshold">收敛阈值</label>
+            <input type="number" id="threshold" name="convergence_threshold" value="0.15" min="0.05" max="0.5"
+              step="0.05">
+          </div>
+
+          <div class="form-group">
+            <label for="model">LLM 模型</label>
+            <select id="model" name="model">
+              <option value="qwen-plus">qwen-plus（推荐）</option>
+              <option value="qwen-max">qwen-max（高级）</option>
+              <option value="qwen-turbo">qwen-turbo（快速）</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="temperature">采样温度</label>
+            <input type="number" id="temperature" name="temperature" value="0.7" min="0" max="1" step="0.1">
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableSearch" name="enable_search">
+              启用联网搜索
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableOpinion" name="enable_public_opinion">
+              启用舆情模拟
+            </label>
+          </div>
+
+          <button type="submit" class="btn-primary" id="submitBtn" disabled>
+            开始仿真
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    const issueSelect = document.getElementById('issueSelect');
+    const customIssueFields = document.getElementById('customIssueFields');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // 监听议题选择变化
+    issueSelect.addEventListener('change', (e) => {
+      const value = e.target.value;
+
+      if (value === 'custom') {
+        customIssueFields.style.display = 'block';
+        submitBtn.disabled = false;
+      } else if (value) {
+        customIssueFields.style.display = 'none';
+        submitBtn.disabled = false;
+      } else {
+        customIssueFields.style.display = 'none';
+        submitBtn.disabled = true;
+      }
+    });
+
+    document.getElementById('runForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(e.target);
+      const issueSelectValue = issueSelect.value;
+
+      let config = {
+        max_rounds: parseInt(formData.get('max_rounds')),
+        convergence_threshold: parseFloat(formData.get('convergence_threshold')),
+        model: formData.get('model'),
+        temperature: parseFloat(formData.get('temperature')),
+        enable_search: formData.get('enable_search') === 'on',
+        enable_public_opinion: formData.get('enable_public_opinion') === 'on'
+      };
+
+      if (issueSelectValue === 'custom') {
+        // 自定义议题
+        const title = document.getElementById('customTitle').value.trim();
+        const description = document.getElementById('customDescription').value.trim();
+        const background = document.getElementById('customBackground').value.trim();
+        const urgency = document.getElementById('customUrgency').value;
+
+        if (!title) {
+          alert('请输入议题标题');
+          return;
+        }
+        if (!description) {
+          alert('请输入议题描述');
+          return;
+        }
+
+        config.custom_issue = {
+          id: 'custom_' + Date.now(),
+          title: title,
+          description: description,
+          background: background || '用户自定义议题',
+          urgency: urgency,
+          sectors: ['通用']
+        };
+      } else if (issueSelectValue) {
+        // 预设议题
+        config.issue_id = issueSelectValue;
+      } else {
+        alert('请选择或输入议题');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '正在创建...';
+
+      try {
+        const response = await fetch('/api/runs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          window.location.href = `/runs/${data.run_id}`;
+        } else {
+          alert('创建失败：' + await response.text());
+          submitBtn.disabled = false;
+          submitBtn.textContent = '开始仿真';
+        }
+      } catch (error) {
+        alert('创建失败：' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '开始仿真';
+      }
+    });
+  </script>
+</body>
+
+</html>
