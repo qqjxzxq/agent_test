@@ -1,7 +1,17 @@
 {
+    "id": "struct_issue_001",
+    "title": "城市公共交通电动化转型政策",
     "policy_target": "推进城市公共交通电动化转型，提高环保效益并兼顾财政可承受性与交通服务稳定性",
     "time_horizon": 5,
-    "dimensions": [
+    "urgency": "high",
+    "sectors": [
+        "交通运输",
+        "环境保护",
+        "财政",
+        "能源",
+        "城市规划"
+    ],
+        "dimensions": [
       {
         "key": "electric_bus_ratio",
         "name": "电动公交车占比目标",

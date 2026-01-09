@@ -128,15 +128,21 @@ class DepartmentAgent(BaseAgent):
 预估预算：{shared_state.policy_card.estimated_budget}元
 关键措施：{', '.join(shared_state.policy_card.key_measures)}
 
-请从{self.name}的职责和目标出发，给出详细的备忘录（JSON格式）：
+请从{self.name}的职责和目标出发，给出【严格 JSON】（不要任何解释文本）：
+
 {{
-    "position": "support/oppose/conditional",
-    "rationale": "立场理由（200字）",
-    "concerns": ["关切点1", "关切点2"],
-    "recommendations": ["建议1", "建议2"],
-    "conditions": ["在什么条件下支持"],
-    "bottom_line": "部门红线（不能接受什么）"
+    "position": "support | oppose | conditional",
+    "rationale": "以部门专业视角给出立场理由（不超过250字）",
+    "concerns": ["部门最担心的问题1", "部门最担心的问题2"],
+    "recommendations": ["希望修改或补充的建议1", "建议2"],
+    "conditions": ["在什么条件下可以同意该政策（可妥协点）"],
+    "bottom_line": "部门红线（即使谈判也绝不接受的点，务必明确、具体）"
 }}
+
+⚠️ 要求：
+- 只能输出 JSON
+- 字段必须齐全
+- 内容必须符合{self.name}的真实职责逻辑
 """
         
         response = self.llm.simple_chat([
@@ -157,6 +163,8 @@ class DepartmentAgent(BaseAgent):
                     concerns=memo_data.get("concerns", []),
                     recommendations=memo_data.get("recommendations", [])
                 )
+                self.state.conditions = memo_data.get("conditions", [])
+                self.state.bottom_line = memo_data.get("bottom_line", "")
             else:
                 raise ValueError("未找到JSON格式")
         except Exception:
@@ -188,35 +196,71 @@ class DepartmentAgent(BaseAgent):
         message: AgentMessage,
         shared_state: SharedState
     ) -> Dict[str, Any]:
-        """处理提案消息（部门Agent可以参与谈判）"""
+        """处理提案消息：从‘回应’升级为‘谈判反馈’"""
+
         if not message.from_agent:
             return {"error": "消息发送者不能为空"}
-        
-        # 分析提案
+
         prompt = f"""
-收到来自{message.from_agent}的提案：
-{message.content}
+    你是{self.name}，正在参与一项涉及多个政府部门的政策谈判。
 
-请评估这个提案：
-1. 是否符合{self.name}的利益和立场？
-2. 是否可以接受？
-3. 需要什么修改？
+    📩 来自部门：{message.from_agent}
+    📄 他们的提案内容：
+    {message.content}
 
-请给出你的评估和回复。
-"""
-        
+    🧠 请基于{self.name}的职责、利益与立场，给出【严格 JSON 谈判回应】：
+    {{
+    "evaluation": "用简短一句话评价该提案（不超过80字）",
+    "stance": "accept | accept_with_changes | reject",
+    "required_changes": [
+        "如果 stance=accept_with_changes：必须修改哪些内容（具体、可操作）"
+    ],
+    "can_compromise": true | false,
+    "compromise_suggestions": [
+        "如果可以妥协：你可以给出的折中方案1",
+        "折中方案2"
+    ],
+    "risk_warning": "如果接受当前方案，可能的风险提示（一句话）"
+    }}
+
+    ⚠️ 要求
+    - 只能输出 JSON
+    - 所有 key 必须存在
+    - 判断逻辑必须符合{self.name}的真实利益与职责
+    """
+
         response = self.llm.simple_chat([
             {"role": "system", "content": self._get_system_prompt()},
             {"role": "user", "content": prompt}
         ])
-        
-        # 发送回复
+
+        # 尝试解析 JSON
+        try:
+            json_start = response.find("{")
+            json_end = response.rfind("}") + 1
+            feedback = json.loads(response[json_start:json_end])
+        except Exception:
+            feedback = {
+                "evaluation": "需要进一步评估该提案",
+                "stance": "accept_with_changes",
+                "required_changes": ["请补充更多细节与论证"],
+                "can_compromise": True,
+                "compromise_suggestions": ["可以考虑阶段性推进或试点先行"],
+                "risk_warning": "存在财政、执行或风险不确定性"
+            }
+
+        # 发送“谈判反馈”而不是普通文本
+        reply_text = json.dumps(feedback, ensure_ascii=False, indent=2)
+
         reply = await self.communicate(
             message.from_agent,
             MessageType.RESPONSE,
-            response,
+            reply_text,
             shared_state
         )
-        
-        return {"reply_sent": True, "message_id": reply.id}
 
+        return {
+            "reply_sent": True,
+            "message_id": reply.id,
+            "negotiation_feedback": feedback
+        }

@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime
 from typing import AsyncGenerator, List, Dict, Any
 from app.models import (
-    SharedState, Issue, Constraints, PolicyCard, TraceEvent, RunConfig,
+    SharedState, Issue, StructuredIssue, Constraints, PolicyCard, TraceEvent, RunConfig,
     AgentRole, AgentStatus, GateResult, NegotiationRound
 )
 from app.llm_client import LLMClient
@@ -30,7 +30,7 @@ class DecisionWorkflow:
         )
         self.agent_manager = AgentManager(self.llm)
     
-    async def run(self, issue: Issue) -> AsyncGenerator[dict, None]:
+    async def run(self, issue: Issue | StructuredIssue) -> AsyncGenerator[dict, None]:
         """执行工作流，生成 SSE 事件流"""
         
         # 初始化状态

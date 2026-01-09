@@ -60,6 +60,22 @@ class Issue(BaseModel):
     urgency: Literal["low", "medium", "high", "critical"]
     sectors: List[str] = Field(default_factory=list)
 
+# 尝试增加结构化issue
+class StructuredIssue(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    background: str = ""  # 背景信息，兼容 Issue 模型
+    core_problem: str
+    objectives: List[str] = Field(default_factory=list)
+    constraints: Dict[str, Any] = Field(default_factory=dict)
+    stakeholders: List[str] = Field(default_factory=list)
+    urgency: Literal["low", "medium", "high", "critical"]
+    sectors: List[str] = Field(default_factory=list)
+    time_horizon: Optional[int] = None
+    dimensions: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 
 # ===== Policy Card =====
 class PolicyCard(BaseModel):
@@ -218,7 +234,7 @@ class SharedState(BaseModel):
     """多Agent共享状态"""
     # Core
     run_id: str
-    issue: Issue
+    issue: Issue | StructuredIssue
     constraints: Constraints
     
     # Policy Evolution

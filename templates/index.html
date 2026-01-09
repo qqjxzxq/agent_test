@@ -34,12 +34,15 @@
             <select id="issueSelect" name="issue_select">
               <option value="">请选择议题...</option>
               {% for issue in issues %}
-              <option value="{{ issue.id }}" data-title="{{ issue.title }}" data-description="{{ issue.description }}"
-                data-background="{{ issue.background }}" data-urgency="{{ issue.urgency }}"
-                data-sectors='{{ issue.sectors | tojson }}'>
+              <option value="{{ issue.id }}"
+                data-title="{{ issue.policy_target }}"
+                data-description="{{ issue.policy_target }}"
+                data-urgency="{{ issue.urgency }}"
+                data-sectors='{{ (issue.sectors or []) | tojson }}'>
                 {{ issue.title }} [紧急度: {{ urgency_map.get(issue.urgency, issue.urgency).upper() }}]
               </option>
               {% endfor %}
+              
               <option value="custom">自定义议题...</option>
             </select>
           </div>

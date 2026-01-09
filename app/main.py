@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.models import Issue, RunConfig
+from app.models import Issue, RunConfig, StructuredIssue
 from app.workflow import DecisionWorkflow
 from app.storage import storage
 from app.config import settings
@@ -32,15 +32,55 @@ active_workflows = {}
 
 
 # ===== 示例议题加载 =====
-def load_sample_issues():
-    issues_dir = Path("data/issues")
-    issues = []
-    for issue_file in issues_dir.glob("*.json"):
-        with open(issue_file, "r", encoding="utf-8") as f:
-            issue_data = json.load(f)
-            issues.append(Issue(**issue_data))
-    return issues
 
+def load_sample_issues():
+    struct_dir = Path("data/struct_issues")
+    legacy_dir = Path("data/issues")
+    issues = []
+
+    # -------- 优先加载结构化决策议题 --------
+    if struct_dir.exists():
+        for issue_file in struct_dir.glob("*.json"):
+            with open(issue_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # 确保 sectors 是列表类型
+            sectors_data = data.get("sectors")
+            if sectors_data is None:
+                sectors_data = []
+            elif not isinstance(sectors_data, list):
+                sectors_data = [sectors_data] if sectors_data else []
+            
+            issues.append(StructuredIssue(
+                id=data.get("id"),
+                title=data.get("title"),
+                description=data.get("policy_target", data.get("description", "")),
+                background=data.get("background", data.get("policy_target", data.get("description", ""))),  # 使用 policy_target 或 description 作为背景
+
+                # --- 新结构字段 ---
+                core_problem=data.get("core_problem", "（未提供核心问题描述）"),
+                objectives=data.get("objectives", []),
+                constraints=data.get("constraints", {}),
+                stakeholders=data.get("stakeholders", []),
+
+                # --- UI 字段 ---
+                urgency=data.get("urgency", "medium"),
+                sectors=sectors_data,
+                time_horizon=data.get("time_horizon"),
+                dimensions=data.get("dimensions", [])
+            ))
+
+        return issues
+
+
+    # -------- 兼容旧版议题 --------
+    if legacy_dir.exists():
+        for issue_file in legacy_dir.glob("*.json"):
+            with open(issue_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                issues.append(data)
+
+    return issues
 
 SAMPLE_ISSUES = load_sample_issues()
 
