@@ -76,6 +76,21 @@ class StructuredIssue(BaseModel):
     dimensions: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class PolicyProposal(BaseModel):
+    department_id: str
+    round: int
+    proposals: Dict[str, Any]  # 每个维度的提案值
+    justification: str         # LLM 生成理由
+
+
+class NegotiationRound(BaseModel):
+    round_id: int
+    proposals: List[PolicyProposal]
+    conflicts: Dict[str, float]   # 各维度冲突程度
+    selected_conflict_dim: Optional[str] = None
+    compromise: Optional[Dict[str, Any]] = None
+
+
 
 # ===== Policy Card =====
 class PolicyCard(BaseModel):

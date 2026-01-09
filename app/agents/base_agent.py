@@ -55,6 +55,39 @@ class BaseAgent(ABC):
         
         self.state.preferences = self.weights
     
+    ## “Agent 如何根据自身权重对 policy dimension 给出提案值”的决策策略函数。    
+    def propose_policy_value(agent, dimension):
+        w = agent.weights
+        
+        if dimension.type == "continuous":
+            low, high = dimension.range
+            mid = (low + high) / 2
+            
+            # 财政偏省钱 → 倾向下限
+            if "financial_cost" in w and w["financial_cost"] > 0.4:
+                return low + 0.2 * (high - low)
+            
+            # 环保偏环境 → 倾向上限
+            if "environmental_benefit" in w and w["environmental_benefit"] > 0.4:
+                return high - 0.1 * (high - low)
+
+            return mid
+        
+        elif dimension.type == "enum":
+            options = dimension.options
+            
+            # 安全部门 → 选最保守
+            if "security_risk" in w and w["security_risk"] > 0.4:
+                return options[0]
+            
+            # 发展部门 → 选激进
+            if "industry_growth" in w and w["industry_growth"] > 0.4:
+                return options[-1]
+            
+            return dimension.default
+
+    
+
     async def observe(self, shared_state: SharedState) -> Dict[str, Any]:
         """
         观察阶段：感知环境信息
