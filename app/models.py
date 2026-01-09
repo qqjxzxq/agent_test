@@ -158,6 +158,7 @@ class AgentState(BaseModel):
     recommendations: List[str] = Field(default_factory=list)
     last_action: Optional[Dict[str, Any]] = None
     last_updated: datetime = Field(default_factory=datetime.now)
+    preferences: Optional[Dict[str, float]] = None
 
 
 # ===== Memo =====

@@ -25,7 +25,8 @@ class BaseAgent(ABC):
         llm_client: LLMClient,
         name: str = "",
         goal: str = "",
-        backstory: str = ""
+        backstory: str = "",
+        weights: dict | None = None
     ):
         self.agent_id = agent_id
         self.role = role
@@ -33,6 +34,15 @@ class BaseAgent(ABC):
         self.name = name or role.value
         self.goal = goal
         self.backstory = backstory
+        self.weights = weights or {}
+        
+        # ---- 归一化 ----
+        total = sum(self.weights.values()) if self.weights else 0
+        if total > 0:
+            self.weights = {
+                k: v / total
+                for k, v in self.weights.items()
+            }
         
         # 初始化状态
         self.state = AgentState(
@@ -40,7 +50,10 @@ class BaseAgent(ABC):
             role=role,
             status=AgentStatus.IDLE,
             memory=AgentMemory(agent_id=agent_id)
+            
         )
+        
+        self.state.preferences = self.weights
     
     async def observe(self, shared_state: SharedState) -> Dict[str, Any]:
         """

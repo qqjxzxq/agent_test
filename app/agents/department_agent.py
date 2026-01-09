@@ -11,45 +11,83 @@ from app.llm_client import LLMClient
 class DepartmentAgent(BaseAgent):
     """部门Agent，代表各个政府部门"""
     
-    # 部门配置
+    # 部门配置 + 偏好
     DEPARTMENT_CONFIGS = {
         AgentRole.FINANCE: {
             "name": "财政部",
             "goal": "确保财政可持续性和预算合理性",
-            "backstory": "负责财政管理和预算审查，关注政策的财政影响和资金可行性"
+            "backstory": "负责财政管理和预算审查，关注政策的财政影响和资金可行性",
+            "weights": {
+                "financial_cost": 0.5,
+                "implementability": 0.3,
+                "public_acceptance": 0.1,
+                "environmental_benefit": 0.1
+            }
         },
         AgentRole.LEGAL: {
             "name": "法制办",
             "goal": "确保政策符合法律法规",
-            "backstory": "负责法律审查和合规性检查，确保政策有充分的法律依据"
+            "backstory": "负责法律审查和合规性检查，确保政策有充分的法律依据",
+            "weights": {
+                "legal_risk": 0.6,
+                "implementability": 0.2,
+                "public_acceptance": 0.1,
+                "stakeholder_conflict": 0.1
+            }
         },
         AgentRole.PLANNING: {
             "name": "规划局",
             "goal": "统筹规划，确保政策与整体规划协调",
-            "backstory": "负责城市规划和政策协调，关注政策的长期影响和系统性"
+            "backstory": "负责城市规划和政策协调，关注政策的长期影响和系统性",
+            "weights": {
+                "long_term_impact": 0.4,
+                "coordination_fit": 0.3,
+                "implementability": 0.2,
+                "financial_cost": 0.1
+            }
         },
         AgentRole.INDUSTRY: {
             "name": "工信局",
             "goal": "促进产业发展和数字化转型",
-            "backstory": "负责产业政策制定和执行，关注政策对产业发展的影响"
+            "backstory": "负责产业政策制定和执行，关注政策对产业发展的影响",
+            "weights": {
+                "industry_growth": 0.5,
+                "implementability": 0.2,
+                "financial_cost": 0.1,
+                "public_acceptance": 0.2
+            }
         },
         AgentRole.ENVIRONMENT: {
             "name": "环保局",
             "goal": "保护环境和促进可持续发展",
-            "backstory": "负责环境保护和生态建设，关注政策的环境影响"
+            "backstory": "负责环境保护和生态建设，关注政策的环境影响",
+            "weights": {
+                "environmental_benefit": 0.6,
+                "public_acceptance": 0.2,
+                "long_term_impact": 0.1,
+                "financial_cost": 0.1
+            }
         },
         AgentRole.SECURITY: {
             "name": "安全局",
             "goal": "确保政策实施的安全性和稳定性",
-            "backstory": "负责安全风险评估和应急管理，关注政策的安全影响"
+            "backstory": "负责安全风险评估和应急管理，关注政策的安全影响",
+            "weights": {
+                "security_risk": 0.6,
+                "implementability": 0.2,
+                "public_acceptance": 0.1,
+                "long_term_impact": 0.1
+            }
         }
     }
+
     
     def __init__(self, agent_id: str, role: AgentRole, llm_client: LLMClient):
         config = self.DEPARTMENT_CONFIGS.get(role, {
             "name": role.value,
             "goal": "完成部门职责",
-            "backstory": "政府部门"
+            "backstory": "政府部门",
+            "weights": {}
         })
         
         super().__init__(
@@ -58,7 +96,8 @@ class DepartmentAgent(BaseAgent):
             llm_client=llm_client,
             name=config["name"],
             goal=config["goal"],
-            backstory=config["backstory"]
+            backstory=config["backstory"],
+            weights=config.get("weights", {})
         )
     
     def _get_system_prompt(self) -> str:
